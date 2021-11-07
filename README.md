@@ -16,7 +16,7 @@ switch(value) {
 
 The code should be translated to
 ```java
-Object carrier = invokedynamic match(value)Ljava/lang/Object; ["Point(??),Rectangle(Point(?_)?)", "IIIILPoint;"]
+Object carrier = invokedynamic match(value)Ljava/lang/Object; ["Point(??)|Rectangle(Point(?_)?)", "IIIILPoint;"]
 switch(invokedynamic component(carrier)I [0, MethodType(IIILPoint;)Ljava/lang/Object;]) {
   case 0 -> invokedynamic component(carrier)I [1, MethodType(IIILPoint;)Ljava/lang/Object;] +
             invokedynamic component(carrier)I [2, MethodType(IIILPoint;)Ljava/lang/Object;];
@@ -36,10 +36,10 @@ so we need a carrier(int, int, int Point) with
 - `case Point(int a, int b)` => from carrier (:1 int, :2 int)
 - `case Rectangle(Point(a, _), Point p)` => from carrier (:1 int, :3 Point)
 
-The pattern is encoded as a string with the convention that '?' means a binding, '_' means a hole,
+The pattern is encoded as a string with the convention that '?' is a binding, '_' is a hole, `|` means __or__, a name is a type pattern, '(' and ')' enter and exit a sub-pattern
 so the encoding here is
 ```
-  "Point(??),Rectangle(Point(?_)?)"
+  "Point(??)|Rectangle(Point(?_)?)"
 ```
 and the type of each binding/hole in order is "IIIILPoint;"
 

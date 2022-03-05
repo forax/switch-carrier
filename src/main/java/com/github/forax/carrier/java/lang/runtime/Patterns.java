@@ -64,14 +64,14 @@ public class Patterns {
   }
 
   // return o -> pattern.apply(o, carrier);
-  public static MethodHandle of(Object emptyCarrier, MethodHandle pattern) {
-    Objects.requireNonNull(emptyCarrier, "emptyCarrier is null");
+  public static MethodHandle of(Object carrier, MethodHandle pattern) {
+    Objects.requireNonNull(carrier, "carrier is null");
     Objects.requireNonNull(pattern, "pattern is null");
     checkPattern(pattern);
-    return insertArguments(pattern, 1, emptyCarrier);
+    return insertArguments(pattern, 1, carrier);
   }
 
-  // return (o, carrier) -> carrier;
+  // return (o, carrier) -> with(index, carrier, 0);
   public static MethodHandle match(Class<?> type, CarrierMetadata carrierMetadata, int index) {
     Objects.requireNonNull(type, "type is null");
     return dropArguments(insertArguments(carrierMetadata.with(0), 0, index), 0, type);

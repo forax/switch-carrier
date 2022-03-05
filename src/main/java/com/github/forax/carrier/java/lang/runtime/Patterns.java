@@ -9,7 +9,6 @@ import java.util.Arrays;
 import java.util.Objects;
 import java.util.stream.IntStream;
 
-import static java.lang.invoke.MethodHandles.constant;
 import static java.lang.invoke.MethodHandles.dropArguments;
 import static java.lang.invoke.MethodHandles.filterArguments;
 import static java.lang.invoke.MethodHandles.filterReturnValue;
@@ -84,20 +83,17 @@ public class Patterns {
     return match(type, carrierMetadata, -1);
   }
 
+  // return (o, carrier) -> type.isInstance(o);
   public static MethodHandle is_instance(Class<?> declaredType, Class<?> type) {
     Objects.requireNonNull(declaredType, "declaredType is null");
     Objects.requireNonNull(type, "type is null");
     return dropArguments(IS_INSTANCE.bindTo(type).asType(methodType(boolean.class, declaredType)), 1, Object.class);
   }
 
+  // return (o, carrier) -> o == null;
   public static MethodHandle is_null(Class<?> type) {
     Objects.requireNonNull(type, "type is null");
     return dropArguments(IS_NULL.asType(methodType(boolean.class, type)), 1, Object.class);
-  }
-
-  public static MethodHandle index(Class<?> type, int index) {
-    Objects.requireNonNull(type, "type is null");
-    return dropArguments(constant(int.class, index), 0, type, Object.class);
   }
 
   // return (o, carrier) -> { throw new NullPointerException(); };
@@ -131,6 +127,15 @@ public class Patterns {
     return foldArguments(mh, carrierMetadata.with(binding));
   }
 
+  // return (o, carrier) -> with(o, carrier, binding);
+  public static MethodHandle bind(int binding, CarrierMetadata carrierMetadata) {
+    Objects.requireNonNull(carrierMetadata, "carrierInfo is null");
+    if (binding < 0) {
+      throw new IllegalArgumentException("binding negative " + binding);
+    }
+    return carrierMetadata.with(binding);
+  }
+
   // return (o, carrier) -> test.test(o, carrier)? target.apply(o, carrier): fallback.apply(o, carrier);
   static MethodHandle test(MethodHandle test, MethodHandle target, MethodHandle fallback) {
     Objects.requireNonNull(test, "test is null");
@@ -142,13 +147,14 @@ public class Patterns {
   }
 
   // return (o, carrier) -> {
-  //      var carrier2 = pattern1.apply(o, carrier);
-  //      if (carrier2.accessor[Ø] == -1) {
-  //        return carrier2;
-  //      }
-  //      return pattern2.apply(o, carrier2);
-  //    };
-  static MethodHandle or(MethodHandle  pattern1, MethodHandle  pattern2, CarrierMetadata carrierMetadata) {
+  //    var carrier2 = pattern1.apply(o, carrier);
+  //    if (carrier2.accessor[Ø] == -1) {
+  //      return carrier2;
+  //    }
+  //    return pattern2.apply(o, carrier2);
+  //  };
+  static MethodHandle or(CarrierMetadata carrierMetadata, MethodHandle  pattern1, MethodHandle  pattern2) {
+    Objects.requireNonNull(carrierMetadata, "carrierMetadata is null");
     Objects.requireNonNull(pattern1, "pattern1 is null");
     Objects.requireNonNull(pattern2, "pattern2 is null");
     checkPattern(pattern1);
@@ -162,6 +168,7 @@ public class Patterns {
     return foldArguments(mh, pattern1);
   }
 
+  // Metadata associated with a Carrier
   public record CarrierMetadata(Object empty, MethodHandle[] accessors, MethodHandle[] withers) {
     public CarrierMetadata(MethodType carrierType) {
       this(empty(carrierType), Carrier.components(carrierType), withers(carrierType));
@@ -227,6 +234,7 @@ public class Patterns {
     }
   }
 
+  // return (Type o, carrier) -> pattern.apply(o, carrier)
   public static MethodHandle cast(Class<?> type, MethodHandle pattern) {
     Objects.requireNonNull(pattern);
     checkPattern(pattern);
@@ -243,7 +251,8 @@ public class Patterns {
     }
   };
 
-  private static MethodHandle record_accessor(Lookup lookup, Class<?> recordClass, int position) {
+  // return o -> o.component[position]
+  public static MethodHandle record_accessor(Lookup lookup, Class<?> recordClass, int position) {
     var accessor = RECORD_COMPONENTS.get(recordClass)[position].getAccessor();
     try {
       return lookup.unreflect(accessor);
@@ -264,24 +273,21 @@ public class Patterns {
     var lookup = MethodHandles.lookup();
 
     var carrierMetadata = new CarrierMetadata(methodType(Object.class, int.class, Point.class, Point.class));
-
     var empty = carrierMetadata.empty();
 
     var op = of(empty,
         test(is_instance(Object.class, Rectangle.class),
             cast(Object.class,
-                or(
+                or(carrierMetadata,
                     project(record_accessor(lookup, Rectangle.class, 0),
                         test(is_null(Point.class),
                             do_not_match(Point.class, carrierMetadata),
-                            bind(1, carrierMetadata,
-                                match(Point.class, carrierMetadata, 0)))),
+                            bind(1, carrierMetadata))),
                     project(record_accessor(lookup, Rectangle.class, 1),
                         test(is_null(Point.class),
                             do_not_match(Point.class, carrierMetadata),
                             bind(2, carrierMetadata,
-                                match(Point.class, carrierMetadata, 0)))),
-                    carrierMetadata
+                                match(Point.class, carrierMetadata, 0))))
                 )
             ),
             throw_NPE(Object.class, "o is null")
@@ -295,12 +301,11 @@ public class Patterns {
     System.out.println("binding 1 " + (Point) carrierMetadata.accessor(1).invokeExact(carrier1));
     System.out.println("binding 2 " + (Point) carrierMetadata.accessor(2).invokeExact(carrier1));
 
-    // match: new Rectangle(new Point(1, 2), new Point(3, 4))
+    // match: new Rectangle(new Point(1, 2), null)
     var rectangle2 = (Object) new Rectangle(new Point(1, 2), null);
     var carrier2 = op.invokeExact(rectangle2);
     System.out.println("result: " + (int) carrierMetadata.accessor(0).invokeExact(carrier2));
     System.out.println("binding 1 " + (Point) carrierMetadata.accessor(1).invokeExact(carrier2));
     System.out.println("binding 2 " + (Point) carrierMetadata.accessor(2).invokeExact(carrier2));
-
   }
 }

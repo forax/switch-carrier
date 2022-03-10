@@ -4,6 +4,7 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodHandles.Lookup;
 import java.lang.invoke.MethodType;
+import java.lang.reflect.Method;
 import java.lang.reflect.RecordComponent;
 import java.util.Arrays;
 import java.util.Objects;
@@ -20,14 +21,14 @@ import static java.lang.invoke.MethodHandles.permuteArguments;
 import static java.lang.invoke.MethodType.methodType;
 
 public class Matcher {
-  private static final MethodHandle THROW_NPE, IS_INSTANCE, IS_NULL, TAP;
+  private static final MethodHandle THROW_NPE, IS_INSTANCE, IS_NULL/*, TAP*/;
   static {
     var lookup = lookup();
     try {
       THROW_NPE = lookup.findStatic(Matcher.class, "throw_npe", methodType(void.class, String.class));
       IS_INSTANCE = lookup.findVirtual(Class.class, "isInstance", methodType(boolean.class, Object.class));
       IS_NULL = lookup.findStatic(Objects.class, "isNull", methodType(boolean.class, Object.class));
-      TAP = lookup.findStatic(Matcher.class, "_tap", methodType(void.class, Object[].class));
+      //TAP = lookup.findStatic(Matcher.class, "_tap", methodType(void.class, Object[].class));
     } catch (NoSuchMethodException | IllegalAccessException e) {
       throw new AssertionError(e);
     }
@@ -37,12 +38,9 @@ public class Matcher {
     throw new NullPointerException(message);
   }
 
-  private static void _tap(Object... args) {
-    System.out.println("TAP " + Arrays.toString(args));
-  }
-
-  // a pattern is typed
-  // (T;Ljava/lang/Object)Ljava/lang/Object;
+//  private static void _tap(Object... args) {
+//    System.out.println("TAP " + Arrays.toString(args));
+//  }
 
 
   private static void checkMatcher(MethodHandle matcher) {
@@ -54,9 +52,9 @@ public class Matcher {
     }
   }
 
-  public static MethodHandle tap(MethodHandle matcher) {
-    return foldArguments(matcher, TAP.asCollector(Object[].class, matcher.type().parameterCount()).asType(matcher.type().changeReturnType(void.class)));
-  }
+//  public static MethodHandle tap(MethodHandle matcher) {
+//    return foldArguments(matcher, TAP.asCollector(Object[].class, matcher.type().parameterCount()).asType(matcher.type().changeReturnType(void.class)));
+//  }
 
   // return o -> matcher.apply(o, carrier);
   public static MethodHandle of(Object carrier, MethodHandle matcher) {
@@ -65,12 +63,6 @@ public class Matcher {
     checkMatcher(matcher);
     return insertArguments(matcher, 1, carrier);
   }
-
-  // return (o, carrier) -> with(index, carrier, 0);
-  //public static MethodHandle match(Class<?> type, CarrierMetadata carrierMetadata, int index) {
-  //  Objects.requireNonNull(type, "type is null");
-  //  return dropArguments(insertArguments(carrierMetadata.with(0), 0, index), 0, type);
-  //}
 
   // return (o, carrier) -> null;
   public static MethodHandle doNotMatch(Class<?> type) {
@@ -170,10 +162,6 @@ public class Matcher {
 
   // Metadata associated with a Carrier
   public record CarrierMetadata(Object empty, MethodHandle[] accessors, MethodHandle[] withers) {
-    public CarrierMetadata(MethodType carrierType) {
-      this(empty(carrierType), Carrier.components(carrierType), withers(carrierType));
-    }
-
     public MethodHandle accessor(int i) {
       return accessors[i];
     }
@@ -183,12 +171,12 @@ public class Matcher {
       return withers[i];
     }
 
-    private static Object empty(MethodType carrierType) {
+    private static Object empty(MethodHandle constructor, MethodHandle[] accessors) {
       try {
-        return MethodHandles.insertArguments(Carrier.constructor(carrierType), 0,
-                Arrays.stream(Carrier.components(carrierType))
-                    .map(c -> {
-                      var type = c.type().returnType();
+        return MethodHandles.insertArguments(constructor, 0,
+                Arrays.stream(accessors)
+                    .map(accessor -> {
+                      var type = accessor.type().returnType();
                       if (!type.isPrimitive()) {
                         return null;
                       }
@@ -205,7 +193,7 @@ public class Matcher {
                       };
                     })
                     .toArray(Object[]::new))
-            .invokeExact();
+            .invoke();
       } catch (RuntimeException | Error e) {
         throw e;
       }catch (Throwable e) {
@@ -213,9 +201,7 @@ public class Matcher {
       }
     }
 
-    private static MethodHandle[] withers(MethodType carrierType) {
-      var constructor = Carrier.constructor(carrierType);
-      var accessors = Carrier.components(carrierType);
+    private static MethodHandle[] withers(MethodHandle constructor, MethodHandle[] accessors) {
       return IntStream.range(0, accessors.length)
           .mapToObj(i -> with(constructor, accessors, i))
           .toArray(MethodHandle[]::new);
@@ -229,8 +215,46 @@ public class Matcher {
         reorder[i] = (i == binding)? 0: 1;
       }
       var mh = filterArguments(constructor, 0, filters);
-      var bindingType = accessors[binding].type().returnType();
-      return MethodHandles.permuteArguments(mh, MethodType.methodType(Object.class, bindingType, Object.class), reorder);
+      var accessorBindingType = accessors[binding].type();
+      var carrierType = accessorBindingType.parameterType(0);
+      var bindingType = accessorBindingType.returnType();
+      return MethodHandles.permuteArguments(mh, MethodType.methodType(carrierType, bindingType, carrierType), reorder);
+    }
+
+    private static CarrierMetadata from(MethodHandle constructor, MethodHandle[] accessors) {
+      var empty = empty(constructor, accessors);
+      var withers = withers(constructor, accessors);
+      return new CarrierMetadata(empty, accessors, withers);
+    }
+
+    public static CarrierMetadata fromCarrier(MethodType carrierType) {
+      return from(Carrier.constructor(carrierType), Carrier.components(carrierType));
+    }
+
+    public static CarrierMetadata fromRecord(Lookup lookup, Class<?> recordClass) {
+      if (!recordClass.isRecord()) {
+        throw new IllegalArgumentException(recordClass.getName() + " is not a record");
+      }
+      var recordComponents = recordClass.getRecordComponents();
+      var accessors = Arrays.stream(recordComponents)
+          .map(recordComponent -> {
+            try {
+              return lookup.unreflect(recordComponent.getAccessor());
+            } catch (IllegalAccessException e) {
+              throw (IllegalAccessError) new IllegalAccessError().initCause(e);
+            }
+          })
+          .toArray(MethodHandle[]::new);
+      MethodHandle constructor;
+      try {
+        constructor = lookup.findConstructor(recordClass, methodType(void.class,
+            Arrays.stream(recordComponents).map(recordComponent -> recordComponent.getAccessor().getReturnType()).toArray(Class[]::new)));
+      } catch (IllegalAccessException e) {
+        throw (IllegalAccessError) new IllegalAccessError().initCause(e);
+      } catch (NoSuchMethodException e) {
+        throw (NoSuchMethodError) new NoSuchMethodError().initCause(e);
+      }
+      return from(constructor, accessors);
     }
   }
 
@@ -239,26 +263,6 @@ public class Matcher {
     Objects.requireNonNull(matcher);
     checkMatcher(matcher);
     return matcher.asType(methodType(Object.class, type, Object.class));
-  }
-
-  private static final ClassValue<RecordComponent[]> RECORD_COMPONENTS = new ClassValue<>() {
-    @Override
-    protected RecordComponent[] computeValue(Class<?> type) {
-      if (!type.isRecord()) {
-        throw new IllegalArgumentException(type.getName() + " is not a record");
-      }
-      return type.getRecordComponents();
-    }
-  };
-
-  // return o -> o.component[position]
-  public static MethodHandle record_accessor(Lookup lookup, Class<?> recordClass, int position) {
-    var accessor = RECORD_COMPONENTS.get(recordClass)[position].getAccessor();
-    try {
-      return lookup.unreflect(accessor);
-    } catch (IllegalAccessException e) {
-      throw (LinkageError) new LinkageError().initCause(e);
-    }
   }
 
   public static void main(String[] args) throws Throwable {
@@ -272,17 +276,19 @@ public class Matcher {
 
     var lookup = MethodHandles.lookup();
 
-    var carrierMetadata = new CarrierMetadata(methodType(Object.class, int.class, Point.class, Point.class));
+    var carrierMetadata = CarrierMetadata.fromCarrier(methodType(Object.class, int.class, Point.class, Point.class));
     var empty = carrierMetadata.empty();
+
+    var rectangleMetadata = CarrierMetadata.fromRecord(lookup, Rectangle.class);
 
     var op = of(empty,
         test(isInstance(Object.class, Rectangle.class),
             cast(Object.class,
-                or(project(record_accessor(lookup, Rectangle.class, 0),
+                or(project(rectangleMetadata.accessor(0),
                         test(isNull(Point.class),
                             doNotMatch(Point.class),
                             bind(1, carrierMetadata))),
-                    project(record_accessor(lookup, Rectangle.class, 1),
+                    project(rectangleMetadata.accessor(1),
                         test(isNull(Point.class),
                             doNotMatch(Point.class),
                             bind(2, carrierMetadata,

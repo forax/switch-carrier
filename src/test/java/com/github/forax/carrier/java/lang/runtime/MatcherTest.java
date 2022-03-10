@@ -26,7 +26,7 @@ public class MatcherTest {
 
   @Test
   public void empty() throws Throwable {
-    var carrierMetadata = new CarrierMetadata(methodType(Object.class, int.class, Object.class));
+    var carrierMetadata = CarrierMetadata.fromCarrier(methodType(Object.class, int.class, Object.class));
     var empty = carrierMetadata.empty();
 
     assertEquals(0, (int) carrierMetadata.accessor(0).invokeExact(empty));
@@ -35,7 +35,7 @@ public class MatcherTest {
 
   @Test
   public void index() throws Throwable {
-    var carrierMetadata = new CarrierMetadata(methodType(Object.class, int.class));
+    var carrierMetadata = CarrierMetadata.fromCarrier(methodType(Object.class, int.class));
     var empty = carrierMetadata.empty();
 
     var pattern = Matcher.index(int.class, carrierMetadata, 42);
@@ -47,7 +47,7 @@ public class MatcherTest {
 
   @Test
   public void doNotMatch() throws Throwable {
-    var carrierMetadata = new CarrierMetadata(methodType(Object.class, int.class));
+    var carrierMetadata = CarrierMetadata.fromCarrier(methodType(Object.class, int.class));
     var empty = carrierMetadata.empty();
 
     var pattern = Matcher.doNotMatch(int.class);
@@ -57,7 +57,7 @@ public class MatcherTest {
 
   @Test
   public void isInstance() throws Throwable {
-    var carrierMetadata = new CarrierMetadata(methodType(Object.class));
+    var carrierMetadata = CarrierMetadata.fromCarrier(methodType(Object.class));
     var empty = carrierMetadata.empty();
 
     var pattern = Matcher.isInstance(Object.class, String.class);
@@ -70,7 +70,7 @@ public class MatcherTest {
 
   @Test
   public void isNull() throws Throwable {
-    var carrierMetadata = new CarrierMetadata(methodType(Object.class));
+    var carrierMetadata = CarrierMetadata.fromCarrier(methodType(Object.class));
     var empty = carrierMetadata.empty();
 
     var pattern = Matcher.isNull(String.class);
@@ -80,7 +80,7 @@ public class MatcherTest {
 
   @Test
   public void throwNPE() {
-    var carrierMetadata = new CarrierMetadata(methodType(Object.class));
+    var carrierMetadata = CarrierMetadata.fromCarrier(methodType(Object.class));
     var empty = carrierMetadata.empty();
 
     var pattern = Matcher.throwNPE(String.class, "achtung !");
@@ -91,7 +91,7 @@ public class MatcherTest {
 
   @Test
   public void project() throws Throwable {
-    var carrierMetadata = new CarrierMetadata(methodType(Object.class, int.class));
+    var carrierMetadata = CarrierMetadata.fromCarrier(methodType(Object.class, int.class));
     var empty = carrierMetadata.empty();
 
     var pattern = Matcher.project(asMH((String s) -> s.length(), int.class, String.class), Matcher.index(int.class, carrierMetadata, 42));
@@ -103,7 +103,7 @@ public class MatcherTest {
 
   @Test
   public void with() throws Throwable {
-    var carrierMetadata = new CarrierMetadata(methodType(Object.class, int.class));
+    var carrierMetadata = CarrierMetadata.fromCarrier(methodType(Object.class, int.class));
     var empty = carrierMetadata.empty();
 
     var mh = carrierMetadata.with(0);
@@ -115,7 +115,7 @@ public class MatcherTest {
 
   @Test
   public void bind3Arguments() throws Throwable {
-    var carrierMetadata = new CarrierMetadata(methodType(Object.class, int.class, String.class));
+    var carrierMetadata = CarrierMetadata.fromCarrier(methodType(Object.class, int.class, String.class));
     var empty = carrierMetadata.empty();
 
     var pattern = Matcher.bind(1, carrierMetadata, Matcher.index(String.class, carrierMetadata, 42));
@@ -129,7 +129,7 @@ public class MatcherTest {
 
   @Test
   public void bind2Arguments() throws Throwable {
-    var carrierMetadata = new CarrierMetadata(methodType(Object.class, int.class, String.class));
+    var carrierMetadata = CarrierMetadata.fromCarrier(methodType(Object.class, int.class, String.class));
     var empty = carrierMetadata.empty();
 
     var pattern = Matcher.bind(1, carrierMetadata);
@@ -143,7 +143,7 @@ public class MatcherTest {
 
   @Test
   public void test() throws Throwable {
-    var carrierMetadata = new CarrierMetadata(methodType(Object.class, int.class));
+    var carrierMetadata = CarrierMetadata.fromCarrier(methodType(Object.class, int.class));
     var empty = carrierMetadata.empty();
 
     var pattern = Matcher.test(asMH((String s) -> s.startsWith("foo"), String.class),
@@ -157,7 +157,7 @@ public class MatcherTest {
 
   @Test
   public void or() throws Throwable {
-    var carrierMetadata = new CarrierMetadata(methodType(Object.class, int.class));
+    var carrierMetadata = CarrierMetadata.fromCarrier(methodType(Object.class, int.class));
     var empty = carrierMetadata.empty();
 
     var pattern = Matcher.or(
@@ -171,7 +171,7 @@ public class MatcherTest {
 
   @Test
   public void orFirstFalse() throws Throwable {
-    var carrierMetadata = new CarrierMetadata(methodType(Object.class, int.class));
+    var carrierMetadata = CarrierMetadata.fromCarrier(methodType(Object.class, int.class));
     var empty = carrierMetadata.empty();
     System.out.println(empty);
 
@@ -186,16 +186,17 @@ public class MatcherTest {
   @Test
   public void record_accessor() throws Throwable {
     record Point(int x, int y) {}
+    var pointMetadata = CarrierMetadata.fromRecord(MethodHandles.lookup(), Point.class);
 
-    var projection0 = Matcher.record_accessor(MethodHandles.lookup(), Point.class, 0);
-    var projection1 = Matcher.record_accessor(MethodHandles.lookup(), Point.class, 1);
+    var projection0 = pointMetadata.accessor(0);
+    var projection1 = pointMetadata.accessor(1);
     assertEquals(42, (int) projection0.invokeExact(new Point(42, 111)));
     assertEquals(111, (int) projection1.invokeExact(new Point(42, 111)));
   }
 
   @Test
   public void of() throws Throwable {
-    var carrierMetadata = new CarrierMetadata(methodType(Object.class, int.class));
+    var carrierMetadata = CarrierMetadata.fromCarrier(methodType(Object.class, int.class));
     var empty = carrierMetadata.empty();
 
     var pattern = Matcher.of(empty, Matcher.index(String.class, carrierMetadata, 42));

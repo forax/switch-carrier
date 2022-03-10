@@ -1,6 +1,6 @@
 package com.github.forax.carrier.java.lang.runtime;
 
-import com.github.forax.carrier.java.lang.runtime.Patterns.CarrierMetadata;
+import com.github.forax.carrier.java.lang.runtime.Matcher.CarrierMetadata;
 import org.junit.jupiter.api.Test;
 
 import java.lang.invoke.MethodHandle;
@@ -11,7 +11,7 @@ import java.util.function.Predicate;
 import static java.lang.invoke.MethodType.methodType;
 import static org.junit.jupiter.api.Assertions.*;
 
-public class PatternsTest {
+public class MatcherTest {
   private static MethodHandle asMH(Function<?, ?> op, Class<?> returnType, Class<?> parameterType) throws NoSuchMethodException, IllegalAccessException {
     return MethodHandles.lookup()
         .bind(op, "apply", methodType(Object.class, Object.class))
@@ -34,33 +34,33 @@ public class PatternsTest {
   }
 
   @Test
-  public void match() throws Throwable {
+  public void index() throws Throwable {
     var carrierMetadata = new CarrierMetadata(methodType(Object.class, int.class));
     var empty = carrierMetadata.empty();
 
-    var pattern = Patterns.match(int.class, carrierMetadata, 42);
+    var pattern = Matcher.index(int.class, carrierMetadata, 42);
     var carrier = (Object) pattern.invokeExact(666, empty);
+    assertNotNull(carrier);
     var result = (int) carrierMetadata.accessor(0).invokeExact(carrier);
     assertEquals(42, result);
   }
 
   @Test
-  public void do_not_match() throws Throwable {
+  public void doNotMatch() throws Throwable {
     var carrierMetadata = new CarrierMetadata(methodType(Object.class, int.class));
     var empty = carrierMetadata.empty();
 
-    var pattern = Patterns.do_not_match(int.class, carrierMetadata);
+    var pattern = Matcher.doNotMatch(int.class);
     var carrier = (Object) pattern.invokeExact(3, empty);
-    var result = (int) carrierMetadata.accessor(0).invokeExact(carrier);
-    assertEquals(-1, result);
+    assertNull(carrier);
   }
 
   @Test
-  public void is_instance() throws Throwable {
+  public void isInstance() throws Throwable {
     var carrierMetadata = new CarrierMetadata(methodType(Object.class));
     var empty = carrierMetadata.empty();
 
-    var pattern = Patterns.is_instance(Object.class, String.class);
+    var pattern = Matcher.isInstance(Object.class, String.class);
     var result = (boolean) pattern.invokeExact((Object) "data", empty);
     assertTrue(result);
 
@@ -69,11 +69,21 @@ public class PatternsTest {
   }
 
   @Test
-  public void throw_NPE() {
+  public void isNull() throws Throwable {
     var carrierMetadata = new CarrierMetadata(methodType(Object.class));
     var empty = carrierMetadata.empty();
 
-    var pattern = Patterns.throw_NPE(String.class, "achtung !");
+    var pattern = Matcher.isNull(String.class);
+    assertFalse((boolean) pattern.invokeExact( "data", empty));
+    assertTrue((boolean) pattern.invokeExact( (String) null, empty));
+  }
+
+  @Test
+  public void throwNPE() {
+    var carrierMetadata = new CarrierMetadata(methodType(Object.class));
+    var empty = carrierMetadata.empty();
+
+    var pattern = Matcher.throwNPE(String.class, "achtung !");
     assertThrows(NullPointerException.class, () -> {
       var result = (Object) pattern.invokeExact("data", empty);
     });
@@ -84,8 +94,9 @@ public class PatternsTest {
     var carrierMetadata = new CarrierMetadata(methodType(Object.class, int.class));
     var empty = carrierMetadata.empty();
 
-    var pattern = Patterns.project(asMH((String s) -> s.length(), int.class, String.class), Patterns.match(int.class, carrierMetadata, 42));
+    var pattern = Matcher.project(asMH((String s) -> s.length(), int.class, String.class), Matcher.index(int.class, carrierMetadata, 42));
     var carrier = pattern.invokeExact("hello", empty);
+    assertNotNull(carrier);
     var result = (int) carrierMetadata.accessor(0).invokeExact(carrier);
     assertEquals(42, result);
   }
@@ -97,6 +108,7 @@ public class PatternsTest {
 
     var mh = carrierMetadata.with(0);
     var carrier = mh.invokeExact(666, empty);
+    assertNotNull(carrier);
     var result = (int) carrierMetadata.accessor(0).invokeExact(carrier);
     assertEquals(666, result);
   }
@@ -106,8 +118,9 @@ public class PatternsTest {
     var carrierMetadata = new CarrierMetadata(methodType(Object.class, int.class, String.class));
     var empty = carrierMetadata.empty();
 
-    var pattern = Patterns.bind(1, carrierMetadata, Patterns.match(String.class, carrierMetadata, 42));
+    var pattern = Matcher.bind(1, carrierMetadata, Matcher.index(String.class, carrierMetadata, 42));
     var carrier = pattern.invokeExact("hello", empty);
+    assertNotNull(carrier);
     var result = (int) carrierMetadata.accessor(0).invokeExact(carrier);
     var binding = (String) carrierMetadata.accessor(1).invokeExact(carrier);
     assertEquals(42, result);
@@ -119,8 +132,9 @@ public class PatternsTest {
     var carrierMetadata = new CarrierMetadata(methodType(Object.class, int.class, String.class));
     var empty = carrierMetadata.empty();
 
-    var pattern = Patterns.bind(1, carrierMetadata);
+    var pattern = Matcher.bind(1, carrierMetadata);
     var carrier = pattern.invokeExact("hello", empty);
+    assertNotNull(carrier);
     var result = (int) carrierMetadata.accessor(0).invokeExact(carrier);
     var binding = (String) carrierMetadata.accessor(1).invokeExact(carrier);
     assertEquals(0, result);
@@ -132,10 +146,11 @@ public class PatternsTest {
     var carrierMetadata = new CarrierMetadata(methodType(Object.class, int.class));
     var empty = carrierMetadata.empty();
 
-    var pattern = Patterns.test(asMH((String s) -> s.startsWith("foo"), String.class),
-        Patterns.match(String.class, carrierMetadata, 0),
-        Patterns.do_not_match(String.class, carrierMetadata));
+    var pattern = Matcher.test(asMH((String s) -> s.startsWith("foo"), String.class),
+        Matcher.index(String.class, carrierMetadata, 0),
+        Matcher.doNotMatch(String.class));
     var carrier = pattern.invokeExact("foobar", empty);
+    assertNotNull(carrier);
     var index = (int) carrierMetadata.accessor(0).invokeExact(carrier);
     assertEquals(0, index);
   }
@@ -145,11 +160,12 @@ public class PatternsTest {
     var carrierMetadata = new CarrierMetadata(methodType(Object.class, int.class));
     var empty = carrierMetadata.empty();
 
-    var pattern = Patterns.or(carrierMetadata,
-        Patterns.match(String.class, carrierMetadata, 1),
-        Patterns.match(String.class, carrierMetadata, 2)
+    var pattern = Matcher.or(
+        Matcher.index(long.class, carrierMetadata, 1),
+        Matcher.index(long.class, carrierMetadata, 2)
     );
-    var carrier = pattern.invokeExact("foo", empty);
+    var carrier = pattern.invokeExact(123L, empty);
+    assertNotNull(carrier);
     assertEquals(2, (int) carrierMetadata.accessor(0).invokeExact(carrier));
   }
 
@@ -157,21 +173,22 @@ public class PatternsTest {
   public void orFirstFalse() throws Throwable {
     var carrierMetadata = new CarrierMetadata(methodType(Object.class, int.class));
     var empty = carrierMetadata.empty();
+    System.out.println(empty);
 
-    var pattern = Patterns.or(carrierMetadata,
-        Patterns.match(String.class, carrierMetadata, -1),
-        Patterns.match(String.class, carrierMetadata, 2)
+    var pattern = Matcher.or(
+        Matcher.doNotMatch(long.class),
+        Matcher.index(long.class, carrierMetadata, 2)
     );
-    var carrier = pattern.invokeExact("foo", empty);
-    assertEquals(-1, (int) carrierMetadata.accessor(0).invokeExact(carrier));
+    var carrier = pattern.invokeExact(123L, empty);
+    assertNull(carrier);
   }
 
   @Test
   public void record_accessor() throws Throwable {
     record Point(int x, int y) {}
 
-    var projection0 = Patterns.record_accessor(MethodHandles.lookup(), Point.class, 0);
-    var projection1 = Patterns.record_accessor(MethodHandles.lookup(), Point.class, 1);
+    var projection0 = Matcher.record_accessor(MethodHandles.lookup(), Point.class, 0);
+    var projection1 = Matcher.record_accessor(MethodHandles.lookup(), Point.class, 1);
     assertEquals(42, (int) projection0.invokeExact(new Point(42, 111)));
     assertEquals(111, (int) projection1.invokeExact(new Point(42, 111)));
   }
@@ -181,12 +198,9 @@ public class PatternsTest {
     var carrierMetadata = new CarrierMetadata(methodType(Object.class, int.class));
     var empty = carrierMetadata.empty();
 
-    var pattern = Patterns.of(empty, Patterns.match(String.class, carrierMetadata, 42));
+    var pattern = Matcher.of(empty, Matcher.index(String.class, carrierMetadata, 42));
     var carrier = pattern.invokeExact("hello");
+    assertNotNull(carrier);
     assertEquals(42, (int) carrierMetadata.accessor(0).invokeExact(carrier));
   }
-
-
-
-
 }

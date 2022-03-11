@@ -4,9 +4,18 @@ import com.github.forax.carrier.java.lang.runtime.Matcher.CarrierMetadata;
 
 import java.lang.invoke.MethodHandles;
 
+import static com.github.forax.carrier.java.lang.runtime.Matcher.bind;
+import static com.github.forax.carrier.java.lang.runtime.Matcher.cast;
+import static com.github.forax.carrier.java.lang.runtime.Matcher.doNotMatch;
+import static com.github.forax.carrier.java.lang.runtime.Matcher.index;
+import static com.github.forax.carrier.java.lang.runtime.Matcher.isInstance;
+import static com.github.forax.carrier.java.lang.runtime.Matcher.isNull;
+import static com.github.forax.carrier.java.lang.runtime.Matcher.of;
+import static com.github.forax.carrier.java.lang.runtime.Matcher.or;
+import static com.github.forax.carrier.java.lang.runtime.Matcher.project;
+import static com.github.forax.carrier.java.lang.runtime.Matcher.switchResult;
+import static com.github.forax.carrier.java.lang.runtime.Matcher.test;
 import static java.lang.invoke.MethodType.methodType;
-
-import static com.github.forax.carrier.java.lang.runtime.Matcher.*;
 
 public class SwitchExamples {
   public static void main(String[] args) throws Throwable {

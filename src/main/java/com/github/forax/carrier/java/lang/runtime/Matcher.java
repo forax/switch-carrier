@@ -4,11 +4,8 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodHandles.Lookup;
 import java.lang.invoke.MethodType;
-import java.lang.reflect.Method;
-import java.lang.reflect.RecordComponent;
 import java.util.Arrays;
 import java.util.Objects;
-import java.util.stream.IntStream;
 
 import static java.lang.invoke.MethodHandles.constant;
 import static java.lang.invoke.MethodHandles.dropArguments;
@@ -21,13 +18,14 @@ import static java.lang.invoke.MethodHandles.permuteArguments;
 import static java.lang.invoke.MethodType.methodType;
 
 public class Matcher {
-  private static final MethodHandle THROW_NPE, IS_INSTANCE, IS_NULL/*, TAP*/;
+  private static final MethodHandle THROW_NPE, IS_INSTANCE, IS_NULL, IS_NOT_NULL/*, TAP*/;
   static {
     var lookup = lookup();
     try {
       THROW_NPE = lookup.findStatic(Matcher.class, "throw_npe", methodType(void.class, String.class));
       IS_INSTANCE = lookup.findVirtual(Class.class, "isInstance", methodType(boolean.class, Object.class));
       IS_NULL = lookup.findStatic(Objects.class, "isNull", methodType(boolean.class, Object.class));
+      IS_NOT_NULL = lookup.findStatic(Objects.class, "nonNull", methodType(boolean.class, Object.class));
       //TAP = lookup.findStatic(Matcher.class, "_tap", methodType(void.class, Object[].class));
     } catch (NoSuchMethodException | IllegalAccessException e) {
       throw new AssertionError(e);
@@ -122,13 +120,6 @@ public class Matcher {
     return carrierMetadata.with(binding);
   }
 
-  // return (o, carrier) -> with(index, carrier, 0)
-  public static MethodHandle index(Class<?> type, CarrierMetadata carrierMetadata, int index) {
-    Objects.requireNonNull(type, "type is null");
-    Objects.requireNonNull(carrierMetadata, "carrierInfo is null");
-    return dropArguments(insertArguments(carrierMetadata.with(0), 0, index), 0, type);
-  }
-
   // return (o, carrier) -> test.test(o, carrier)? target.apply(o, carrier): fallback.apply(o, carrier);
   static MethodHandle test(MethodHandle test, MethodHandle target, MethodHandle fallback) {
     Objects.requireNonNull(test, "test is null");
@@ -160,71 +151,114 @@ public class Matcher {
     return foldArguments(mh, matcher1);
   }
 
+  // return (Type o, carrier) -> matcher.apply(o, carrier)
+  public static MethodHandle cast(Class<?> type, MethodHandle matcher) {
+    Objects.requireNonNull(matcher);
+    checkMatcher(matcher);
+    return matcher.asType(methodType(Object.class, type, Object.class));
+  }
+
+  // return (o, carrier) -> with(index, carrier, 0)
+  public static MethodHandle index(Class<?> type, CarrierMetadata carrierMetadata, int index) {
+    Objects.requireNonNull(type, "type is null");
+    Objects.requireNonNull(carrierMetadata, "carrierInfo is null");
+    return dropArguments(insertArguments(carrierMetadata.with(0), 0, index), 0, type);
+  }
+
+  // return carrier -> (carrier == null)? -1: carrier.component[0];
+  public static MethodHandle switchResult(CarrierMetadata carrierMetadata) {
+    return MethodHandles.guardWithTest(IS_NULL,
+        dropArguments(constant(int.class, -1), 0, Object.class),
+        carrierMetadata.accessor(0)
+    );
+  }
+
+  // return carrier -> carrier == null;
+  public static MethodHandle instanceOfResult() {
+    return IS_NOT_NULL;
+  }
+
   // Metadata associated with a Carrier
-  public record CarrierMetadata(Object empty, MethodHandle[] accessors, MethodHandle[] withers) {
+  public static final class CarrierMetadata {
+    private final MethodHandle constructor;
+    private final MethodHandle[] accessors;
+
+    private Object empty;  // lazily initialized
+    private final MethodHandle[] withers;  // array cell lazily initialized
+
+    private CarrierMetadata(MethodHandle constructor, MethodHandle[] accessors) {
+      this.constructor = constructor;
+      this.accessors = accessors;
+      this.withers = new MethodHandle[accessors.length];
+    }
+
+    // returns an empty carrier
+    public Object empty() {
+      if (empty != null) {
+        return empty;
+      }
+      return empty = empty(constructor, accessors);
+    }
+
     public MethodHandle accessor(int i) {
       return accessors[i];
     }
 
-    // return a mh that creates a new carrier from a value and a previous value of a carrier
+    // returns a mh that creates a new carrier from a value and a previous value of a carrier
     public MethodHandle with(int i) {
-      return withers[i];
+      var wither = withers[i];
+      if (wither != null) {
+        return wither;
+      }
+      return withers[i] = wither(constructor, accessors, i);
     }
 
     private static Object empty(MethodHandle constructor, MethodHandle[] accessors) {
       try {
-        return MethodHandles.insertArguments(constructor, 0,
-                Arrays.stream(accessors)
-                    .map(accessor -> {
-                      var type = accessor.type().returnType();
-                      if (!type.isPrimitive()) {
-                        return null;
-                      }
-                      return switch (type.descriptorString()) {
-                        case "Z" -> false;
-                        case "B" -> (byte) 0;
-                        case "S" -> (short) 0;
-                        case "C" -> '\0';
-                        case "I" -> 0;
-                        case "J" -> 0L;
-                        case "F" -> 0f;
-                        case "D" -> 0.;
-                        default -> throw new AssertionError();
-                      };
-                    })
-                    .toArray(Object[]::new))
+        return insertArguments(constructor, 0,
+            Arrays.stream(accessors)
+                .map(accessor -> {
+                  var type = accessor.type().returnType();
+                  if (!type.isPrimitive()) {
+                    return null;
+                  }
+                  return switch (type.descriptorString()) {
+                    case "Z" -> false;
+                    case "B" -> (byte) 0;
+                    case "S" -> (short) 0;
+                    case "C" -> '\0';
+                    case "I" -> 0;
+                    case "J" -> 0L;
+                    case "F" -> 0f;
+                    case "D" -> 0.;
+                    default -> throw new AssertionError();
+                  };
+                })
+                .toArray(Object[]::new))
             .invoke();
       } catch (RuntimeException | Error e) {
         throw e;
-      }catch (Throwable e) {
+      } catch (Throwable e) {
         throw new AssertionError(e);
       }
     }
 
-    private static MethodHandle[] withers(MethodHandle constructor, MethodHandle[] accessors) {
-      return IntStream.range(0, accessors.length)
-          .mapToObj(i -> with(constructor, accessors, i))
-          .toArray(MethodHandle[]::new);
-    }
-
-    private static MethodHandle with(MethodHandle constructor, MethodHandle[] accessors, int binding) {
+    private static MethodHandle wither(MethodHandle constructor, MethodHandle[] accessors, int binding) {
       var filters = new MethodHandle[accessors.length];
       var reorder = new int[filters.length];
-      for(var i = 0; i < filters.length; i++) {
-        filters[i] = (i == binding)? null: accessors[i];
-        reorder[i] = (i == binding)? 0: 1;
+      for (var i = 0; i < filters.length; i++) {
+        filters[i] = (i == binding) ? null : accessors[i];
+        reorder[i] = (i == binding) ? 0 : 1;
       }
       var mh = filterArguments(constructor, 0, filters);
       var accessorBindingType = accessors[binding].type();
       var carrierType = accessorBindingType.parameterType(0);
       var bindingType = accessorBindingType.returnType();
-      return MethodHandles.permuteArguments(mh, MethodType.methodType(carrierType, bindingType, carrierType), reorder);
+      return permuteArguments(mh, methodType(carrierType, bindingType, carrierType), reorder);
     }
 
     private static CarrierMetadata from(MethodHandle constructor, MethodHandle[] accessors) {
-      var empty = empty(constructor, accessors);
-      var withers = withers(constructor, accessors);
-      return new CarrierMetadata(empty, accessors, withers);
+      return new CarrierMetadata(constructor, accessors);
     }
 
     public static CarrierMetadata fromCarrier(MethodType carrierType) {
@@ -256,64 +290,5 @@ public class Matcher {
       }
       return from(constructor, accessors);
     }
-  }
-
-  // return (Type o, carrier) -> matcher.apply(o, carrier)
-  public static MethodHandle cast(Class<?> type, MethodHandle matcher) {
-    Objects.requireNonNull(matcher);
-    checkMatcher(matcher);
-    return matcher.asType(methodType(Object.class, type, Object.class));
-  }
-
-  public static void main(String[] args) throws Throwable {
-    record Point(int x, int y) {}
-    record Rectangle(Point p1, Point p2) {}
-
-    // Object o = ...
-    //switch(o) {
-    //  case Rectangle(Point p1, Point p2) -> ...
-    //}
-
-    var lookup = MethodHandles.lookup();
-
-    var carrierMetadata = CarrierMetadata.fromCarrier(methodType(Object.class, int.class, Point.class, Point.class));
-    var empty = carrierMetadata.empty();
-
-    var rectangleMetadata = CarrierMetadata.fromRecord(lookup, Rectangle.class);
-
-    var op = of(empty,
-        test(isInstance(Object.class, Rectangle.class),
-            cast(Object.class,
-                or(project(rectangleMetadata.accessor(0),
-                        test(isNull(Point.class),
-                            doNotMatch(Point.class),
-                            bind(1, carrierMetadata))),
-                    project(rectangleMetadata.accessor(1),
-                        test(isNull(Point.class),
-                            doNotMatch(Point.class),
-                            bind(2, carrierMetadata,
-                                index(Point.class, carrierMetadata, 0))))
-                )
-            ),
-            throwNPE(Object.class, "o is null")
-        )
-    );
-
-    // match: new Rectangle(new Point(1, 2), new Point(3, 4))
-    var rectangle1 = (Object) new Rectangle(new Point(1, 2), new Point(3, 4));
-    var carrier1 = op.invokeExact(rectangle1);
-    System.out.println("result: " + (int) carrierMetadata.accessor(0).invokeExact(carrier1));
-    System.out.println("binding 1 " + (Point) carrierMetadata.accessor(1).invokeExact(carrier1));
-    System.out.println("binding 2 " + (Point) carrierMetadata.accessor(2).invokeExact(carrier1));
-
-    // match: new Rectangle(null, new Point(1, 2))
-    var rectangle2 = (Object) new Rectangle(null, new Point(1, 2));
-    var carrier2 = op.invokeExact(rectangle2);
-    System.out.println("carrier: " + carrier2);
-
-    // match: new Rectangle(new Point(1, 2), null)
-    var rectangle3 = (Object) new Rectangle(new Point(1, 2), null);
-    var carrier3 = op.invokeExact(rectangle3);
-    System.out.println("carrier: " + carrier3);
   }
 }

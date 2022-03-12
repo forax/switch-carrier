@@ -44,6 +44,17 @@ public class MatcherTest {
   }
 
   @Test
+  public void doMatch() throws Throwable {
+    var carrierMetadata = CarrierMetadata.fromCarrier(methodType(Object.class, int.class));
+    var empty = carrierMetadata.empty();
+
+    var matcher = Matcher.doMatch(int.class);
+    var carrier = (Object) matcher.invokeExact(3, empty);
+    assertNotNull(carrier);
+    assertSame(empty, carrier);
+  }
+
+  @Test
   public void isInstance() throws Throwable {
     var carrierMetadata = CarrierMetadata.fromCarrier(methodType(Object.class));
     var empty = carrierMetadata.empty();
@@ -144,6 +155,33 @@ public class MatcherTest {
   }
 
   @Test
+  public void and() throws Throwable {
+    var carrierMetadata = CarrierMetadata.fromCarrier(methodType(Object.class, int.class));
+    var empty = carrierMetadata.empty();
+
+    var matcher = Matcher.and(
+        Matcher.index(long.class, carrierMetadata, 1),
+        Matcher.index(long.class, carrierMetadata, 2)
+    );
+    var carrier = matcher.invokeExact(123L, empty);
+    assertNotNull(carrier);
+    assertEquals(2, (int) carrierMetadata.accessor(0).invokeExact(carrier));
+  }
+
+  @Test
+  public void andFirstFalse() throws Throwable {
+    var carrierMetadata = CarrierMetadata.fromCarrier(methodType(Object.class, int.class));
+    var empty = carrierMetadata.empty();
+
+    var matcher = Matcher.and(
+        Matcher.doNotMatch(long.class),
+        Matcher.index(long.class, carrierMetadata, 2)
+    );
+    var carrier = matcher.invokeExact(123L, empty);
+    assertNull(carrier);
+  }
+
+  @Test
   public void or() throws Throwable {
     var carrierMetadata = CarrierMetadata.fromCarrier(methodType(Object.class, int.class));
     var empty = carrierMetadata.empty();
@@ -154,21 +192,21 @@ public class MatcherTest {
     );
     var carrier = matcher.invokeExact(123L, empty);
     assertNotNull(carrier);
-    assertEquals(2, (int) carrierMetadata.accessor(0).invokeExact(carrier));
+    assertEquals(1, (int) carrierMetadata.accessor(0).invokeExact(carrier));
   }
 
   @Test
   public void orFirstFalse() throws Throwable {
     var carrierMetadata = CarrierMetadata.fromCarrier(methodType(Object.class, int.class));
     var empty = carrierMetadata.empty();
-    System.out.println(empty);
 
     var matcher = Matcher.or(
         Matcher.doNotMatch(long.class),
         Matcher.index(long.class, carrierMetadata, 2)
     );
     var carrier = matcher.invokeExact(123L, empty);
-    assertNull(carrier);
+    assertNotNull(carrier);
+    assertEquals(2, (int) carrierMetadata.accessor(0).invokeExact(carrier));
   }
 
   @Test

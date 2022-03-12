@@ -10,20 +10,23 @@ import java.util.Objects;
 import static java.lang.invoke.MethodHandles.constant;
 import static java.lang.invoke.MethodHandles.dropArguments;
 import static java.lang.invoke.MethodHandles.filterArguments;
+import static java.lang.invoke.MethodHandles.filterReturnValue;
 import static java.lang.invoke.MethodHandles.foldArguments;
 import static java.lang.invoke.MethodHandles.guardWithTest;
+import static java.lang.invoke.MethodHandles.identity;
 import static java.lang.invoke.MethodHandles.insertArguments;
 import static java.lang.invoke.MethodHandles.lookup;
 import static java.lang.invoke.MethodHandles.permuteArguments;
 import static java.lang.invoke.MethodType.methodType;
 
 public class Matcher {
-  private static final MethodHandle THROW_NPE, IS_INSTANCE, IS_NULL, IS_NOT_NULL/*, TAP*/;
+  private static final MethodHandle THROW_NPE, IS_INSTANCE, EQUALS, IS_NULL, IS_NOT_NULL/*, TAP*/;
   static {
     var lookup = lookup();
     try {
       THROW_NPE = lookup.findStatic(Matcher.class, "throw_npe", methodType(void.class, String.class));
       IS_INSTANCE = lookup.findVirtual(Class.class, "isInstance", methodType(boolean.class, Object.class));
+      EQUALS = lookup.findVirtual(Object.class, "equals", methodType(boolean.class, Object.class));
       IS_NULL = lookup.findStatic(Objects.class, "isNull", methodType(boolean.class, Object.class));
       IS_NOT_NULL = lookup.findStatic(Objects.class, "nonNull", methodType(boolean.class, Object.class));
       //TAP = lookup.findStatic(Matcher.class, "_tap", methodType(void.class, Object[].class));
@@ -67,6 +70,11 @@ public class Matcher {
     return dropArguments(constant(Object.class, null), 0, type, Object.class);
   }
 
+  // return (o, carrier -> carrier
+  static MethodHandle doMatch(Class<?> type) {
+    return dropArguments(identity(Object.class),0, type);
+  }
+
   // return (o, carrier) -> type.isInstance(o);
   public static MethodHandle isInstance(Class<?> declaredType, Class<?> type) {
     Objects.requireNonNull(declaredType, "declaredType is null");
@@ -78,6 +86,13 @@ public class Matcher {
   public static MethodHandle isNull(Class<?> type) {
     Objects.requireNonNull(type, "type is null");
     return dropArguments(IS_NULL.asType(methodType(boolean.class, type)), 1, Object.class);
+  }
+
+  // return (o, carrier) -> constant.equals(o)
+  public static MethodHandle isEquals(Class<?> type, Object constant) {
+    Objects.requireNonNull(type, "type is null");
+    Objects.requireNonNull(constant, "constant is null");
+    return dropArguments(EQUALS.bindTo(constant).asType(methodType(boolean.class, type)), 1, Object.class);
   }
 
   // return (o, carrier) -> { throw new NullPointerException(); };
@@ -137,7 +152,7 @@ public class Matcher {
   //    }
   //    return matcher2.apply(o, carrier2);
   //  };
-  static MethodHandle or(MethodHandle  matcher1, MethodHandle  matcher2) {
+  static MethodHandle and(MethodHandle  matcher1, MethodHandle  matcher2) {
     Objects.requireNonNull(matcher1, "matcher1 is null");
     Objects.requireNonNull(matcher2, "matcher2 is null");
     checkMatcher(matcher1);
@@ -149,6 +164,26 @@ public class Matcher {
     var guard = guardWithTest(test, doNotMatch, matcher2);
     var mh = permuteArguments(guard, methodType(Object.class, Object.class, type, Object.class), 1, 0 );
     return foldArguments(mh, matcher1);
+  }
+
+  // return (o, carrier) -> {
+  //    var carrier2 = matcher1.apply(o, carrier);
+  //    if (carrier2 == null) {
+  //      return matcher2.apply(o, carrier);
+  //    }
+  //    return carrier2;
+  //  };
+  static MethodHandle or(MethodHandle  matcher1, MethodHandle  matcher2) {
+    Objects.requireNonNull(matcher1, "matcher1 is null");
+    Objects.requireNonNull(matcher2, "matcher2 is null");
+    checkMatcher(matcher1);
+    checkMatcher(matcher2);
+
+    var type = matcher1.type().parameterType(0);
+    var target = dropArguments(matcher2, 0, Object.class);
+    var fallback = dropArguments(identity(Object.class), 1, type, Object.class);
+    var guard = guardWithTest(IS_NULL, target, fallback);
+    return foldArguments(guard, matcher1);
   }
 
   // return (Type o, carrier) -> matcher.apply(o, carrier)

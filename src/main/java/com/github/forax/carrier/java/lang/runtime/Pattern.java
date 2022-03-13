@@ -62,7 +62,8 @@ public sealed interface Pattern {
       //        guardPattern.pattern.toMatcher(lookup, receiverType, bindingAllocator, fail),
       //        test(guardPattern.guard, doMatch(receiverType), doNotMatch(receiverType)));
       case RecordPattern recordPattern -> {
-        var carrierMetadata = CarrierMetadata.fromRecord(lookup, recordPattern.recordClass);
+        var recordClass = recordPattern.recordClass;
+        var carrierMetadata = CarrierMetadata.fromRecord(lookup, recordClass);
         var patterns = recordPattern.patterns;
         var matchers = IntStream.range(0, patterns.length)
             .mapToObj(i -> {
@@ -83,14 +84,15 @@ public sealed interface Pattern {
           var m = matchers[i];
           matcher = matcher == null? m: and(m, matcher);
         }
-        assert matcher != null;
-
-        if (receiverType == recordPattern.recordClass) {
+        if (matcher == null) { // empty record
+          matcher = doMatch(recordClass);
+        }
+        if (receiverType == recordClass) {
           yield matcher;
         }
         yield test(isNull(receiverType),
             cast(receiverType, nullMatcher),
-            test(isInstance(receiverType, recordPattern.recordClass),
+            test(isInstance(receiverType, recordClass),
                 cast(receiverType, matcher),
                 doNotMatch(receiverType)));
       }

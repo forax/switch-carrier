@@ -10,7 +10,6 @@ import java.util.Objects;
 import static java.lang.invoke.MethodHandles.constant;
 import static java.lang.invoke.MethodHandles.dropArguments;
 import static java.lang.invoke.MethodHandles.filterArguments;
-import static java.lang.invoke.MethodHandles.filterReturnValue;
 import static java.lang.invoke.MethodHandles.foldArguments;
 import static java.lang.invoke.MethodHandles.guardWithTest;
 import static java.lang.invoke.MethodHandles.identity;
@@ -32,6 +31,68 @@ public class Matcher {
       //TAP = lookup.findStatic(Matcher.class, "_tap", methodType(void.class, Object[].class));
     } catch (NoSuchMethodException | IllegalAccessException e) {
       throw new AssertionError(e);
+    }
+  }
+
+  private static final class PrimitiveEquals {
+    private static final MethodHandle Z, B, C, S, I, J, F, D;
+    static {
+      var lookup = MethodHandles.lookup();
+      Z = find(lookup, boolean.class);
+      B = find(lookup, byte.class);
+      C = find(lookup, char.class);
+      S = find(lookup, short.class);
+      I = find(lookup, int.class);
+      J = find(lookup, long.class);
+      F = find(lookup, float.class);
+      D = find(lookup, double.class);
+    }
+
+    private static MethodHandle find(Lookup lookup, Class<?> type) {
+      try {
+        return lookup.findStatic(PrimitiveEquals.class, "equals", methodType(boolean.class, type, type));
+      } catch (NoSuchMethodException | IllegalAccessException e) {
+        throw new AssertionError(e);
+      }
+    }
+
+    private static boolean equals(boolean b1, boolean b2) {
+      return b1 == b2;
+    }
+    private static boolean equals(byte b1, byte b2) {
+      return b1 == b2;
+    }
+    private static boolean equals(char b1, char b2) {
+      return b1 == b2;
+    }
+    private static boolean equals(short b1, short b2) {
+      return b1 == b2;
+    }
+    private static boolean equals(int b1, int b2) {
+      return b1 == b2;
+    }
+    private static boolean equals(long b1, long b2) {
+      return b1 == b2;
+    }
+    private static boolean equals(float b1, float b2) {
+      return b1 == b2;
+    }
+    private static boolean equals(double b1, double b2) {
+      return b1 == b2;
+    }
+
+    public static MethodHandle primitiveEquals(Class<?> type) {
+      return switch(type.descriptorString()) {
+        case "Z" -> Z;
+        case "B" -> B;
+        case "C" -> C;
+        case "S" -> S;
+        case "I" -> I;
+        case "J" -> J;
+        case "F" -> F;
+        case "D" -> D;
+        default -> throw new AssertionError(type.getName());
+      };
     }
   }
 
@@ -92,7 +153,8 @@ public class Matcher {
   public static MethodHandle isEquals(Class<?> type, Object constant) {
     Objects.requireNonNull(type, "type is null");
     Objects.requireNonNull(constant, "constant is null");
-    return dropArguments(EQUALS.bindTo(constant).asType(methodType(boolean.class, type)), 1, Object.class);
+    var equals = type.isPrimitive()? PrimitiveEquals.primitiveEquals(type): EQUALS;
+    return dropArguments(insertArguments(equals, 0, constant).asType(methodType(boolean.class, type)), 1, Object.class);
   }
 
   // return (o, carrier) -> { throw new NullPointerException(); };

@@ -78,6 +78,88 @@ public class MatcherTest {
   }
 
   @Test
+  public void isEquals() throws Throwable {
+    var carrierMetadata = CarrierMetadata.fromCarrier(methodType(Object.class));
+    var empty = carrierMetadata.empty();
+
+    var matcher = Matcher.isEquals(String.class, "hello");
+    assertTrue((boolean) matcher.invokeExact( "hello", empty));
+    assertTrue((boolean) matcher.invokeExact( new String("hello"), empty));
+    assertFalse((boolean) matcher.invokeExact( "foo", empty));
+    assertFalse((boolean) matcher.invokeExact( (String) null, empty));
+  }
+
+  @Test
+  public void isEqualsBoolean() throws Throwable {
+    var carrierMetadata = CarrierMetadata.fromCarrier(methodType(Object.class));
+    var empty = carrierMetadata.empty();
+
+    var matcher = Matcher.isEquals(boolean.class, true);
+    assertTrue((boolean) matcher.invokeExact( true, empty));
+    assertFalse((boolean) matcher.invokeExact( false, empty));
+  }
+
+  @Test
+  public void isEqualsByte() throws Throwable {
+    var carrierMetadata = CarrierMetadata.fromCarrier(methodType(Object.class));
+    var empty = carrierMetadata.empty();
+
+    var matcher = Matcher.isEquals(byte.class, (byte) 42);
+    assertTrue((boolean) matcher.invokeExact( (byte) 42, empty));
+    assertFalse((boolean) matcher.invokeExact( (byte) 101, empty));
+  }
+
+  @Test
+  public void isEqualsShort() throws Throwable {
+    var carrierMetadata = CarrierMetadata.fromCarrier(methodType(Object.class));
+    var empty = carrierMetadata.empty();
+
+    var matcher = Matcher.isEquals(short.class, (short) 42);
+    assertTrue((boolean) matcher.invokeExact( (short) 42, empty));
+    assertFalse((boolean) matcher.invokeExact( (short) 101, empty));
+  }
+
+  @Test
+  public void isEqualsInt() throws Throwable {
+    var carrierMetadata = CarrierMetadata.fromCarrier(methodType(Object.class));
+    var empty = carrierMetadata.empty();
+
+    var matcher = Matcher.isEquals(int.class, 42);
+    assertTrue((boolean) matcher.invokeExact( 42, empty));
+    assertFalse((boolean) matcher.invokeExact( 101, empty));
+  }
+
+  @Test
+  public void isEqualsLong() throws Throwable {
+    var carrierMetadata = CarrierMetadata.fromCarrier(methodType(Object.class));
+    var empty = carrierMetadata.empty();
+
+    var matcher = Matcher.isEquals(long.class, 42L);
+    assertTrue((boolean) matcher.invokeExact( 42L, empty));
+    assertFalse((boolean) matcher.invokeExact( 101L, empty));
+  }
+
+  @Test
+  public void isEqualsFloat() throws Throwable {
+    var carrierMetadata = CarrierMetadata.fromCarrier(methodType(Object.class));
+    var empty = carrierMetadata.empty();
+
+    var matcher = Matcher.isEquals(float.class, 42f);
+    assertTrue((boolean) matcher.invokeExact( 42f, empty));
+    assertFalse((boolean) matcher.invokeExact( 101f, empty));
+  }
+
+  @Test
+  public void isEqualsDouble() throws Throwable {
+    var carrierMetadata = CarrierMetadata.fromCarrier(methodType(Object.class));
+    var empty = carrierMetadata.empty();
+
+    var matcher = Matcher.isEquals(double.class, 42.);
+    assertTrue((boolean) matcher.invokeExact( 42., empty));
+    assertFalse((boolean) matcher.invokeExact( 101., empty));
+  }
+
+  @Test
   public void throwNPE() {
     var carrierMetadata = CarrierMetadata.fromCarrier(methodType(Object.class));
     var empty = carrierMetadata.empty();

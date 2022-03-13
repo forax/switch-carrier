@@ -1,8 +1,13 @@
 package com.github.forax.carrier.java.lang.runtime;
 
 import com.github.forax.carrier.java.lang.runtime.Matcher.CarrierMetadata;
+import com.github.forax.carrier.java.lang.runtime.Pattern.OrPattern;
+import com.github.forax.carrier.java.lang.runtime.Pattern.RecordPattern;
+import com.github.forax.carrier.java.lang.runtime.Pattern.ResultPattern;
+import com.github.forax.carrier.java.lang.runtime.Pattern.TypePattern;
 
 import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
 
 import static com.github.forax.carrier.java.lang.runtime.Matcher.bind;
 import static com.github.forax.carrier.java.lang.runtime.Matcher.cast;
@@ -11,7 +16,7 @@ import static com.github.forax.carrier.java.lang.runtime.Matcher.index;
 import static com.github.forax.carrier.java.lang.runtime.Matcher.isInstance;
 import static com.github.forax.carrier.java.lang.runtime.Matcher.isNull;
 import static com.github.forax.carrier.java.lang.runtime.Matcher.of;
-import static com.github.forax.carrier.java.lang.runtime.Matcher.or;
+import static com.github.forax.carrier.java.lang.runtime.Matcher.and;
 import static com.github.forax.carrier.java.lang.runtime.Matcher.project;
 import static com.github.forax.carrier.java.lang.runtime.Matcher.switchResult;
 import static com.github.forax.carrier.java.lang.runtime.Matcher.test;
@@ -30,29 +35,24 @@ public class SwitchExamples {
 
     var lookup = MethodHandles.lookup();
 
-    var carrierMetadata = CarrierMetadata.fromCarrier(methodType(Object.class, int.class, Point.class, Point.class, Object.class));
+    var carrierType = methodType(Object.class, int.class, Point.class, Point.class, Object.class);
+    var carrierMetadata = CarrierMetadata.fromCarrier(carrierType);
     var empty = carrierMetadata.empty();
 
-    var rectangleMetadata = CarrierMetadata.fromRecord(lookup, Rectangle.class);
-
-    var op = of(empty,
-        test(isInstance(Object.class, Rectangle.class),
-            cast(Object.class,
-                or(project(rectangleMetadata.accessor(0),
-                        test(isNull(Point.class),
-                            doNotMatch(Point.class),
-                            bind(1, carrierMetadata))),
-                    project(rectangleMetadata.accessor(1),
-                        test(isNull(Point.class),
-                            doNotMatch(Point.class),
-                            bind(2, carrierMetadata,
-                                index(Point.class, carrierMetadata, 0))))
-                )
-            ),
-            bind(3, carrierMetadata,
-                index(Object.class, carrierMetadata, 1))
-        )
+    var pattern = new OrPattern(
+      new ResultPattern(0,
+          new RecordPattern(Rectangle.class,
+              new TypePattern(Point.class),
+              new TypePattern(Point.class)
+          )
+      ),
+      new ResultPattern(1,
+          new TypePattern(Object.class)
+      )
     );
+
+    var matcher = pattern.toMatcher(lookup, Object.class, carrierType, 1, doNotMatch(Object.class));
+    var op = of(empty, matcher);
 
     // match: new Rectangle(new Point(1, 2), new Point(3, 4))
     var object1 = (Object) new Rectangle(new Point(1, 2), new Point(3, 4));

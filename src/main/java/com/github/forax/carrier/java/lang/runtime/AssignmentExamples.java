@@ -1,13 +1,17 @@
 package com.github.forax.carrier.java.lang.runtime;
 
 import com.github.forax.carrier.java.lang.runtime.Matcher.CarrierMetadata;
+import com.github.forax.carrier.java.lang.runtime.Pattern.RecordPattern;
+import com.github.forax.carrier.java.lang.runtime.Pattern.TypePattern;
 
 import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
 
 import static com.github.forax.carrier.java.lang.runtime.Matcher.bind;
 import static com.github.forax.carrier.java.lang.runtime.Matcher.of;
-import static com.github.forax.carrier.java.lang.runtime.Matcher.or;
+import static com.github.forax.carrier.java.lang.runtime.Matcher.and;
 import static com.github.forax.carrier.java.lang.runtime.Matcher.project;
+import static com.github.forax.carrier.java.lang.runtime.Matcher.throwNPE;
 import static java.lang.invoke.MethodType.methodType;
 
 public class AssignmentExamples {
@@ -20,19 +24,15 @@ public class AssignmentExamples {
 
     var lookup = MethodHandles.lookup();
 
-    var carrierMetadata = CarrierMetadata.fromCarrier(methodType(Object.class, int.class, int.class));
+    var carrierType = methodType(Object.class, int.class, int.class);
+    var carrierMetadata = CarrierMetadata.fromCarrier(carrierType);
     var empty = carrierMetadata.empty();
 
-    var minMaxMetadata = CarrierMetadata.fromRecord(lookup, MinMax.class);
-
-    var op = of(empty,
-        or(
-          project(minMaxMetadata.accessor(0),
-              bind(0, carrierMetadata)),
-          project(minMaxMetadata.accessor(1),
-              bind(1, carrierMetadata))
-        )
-    );
+    var pattern = new RecordPattern(MinMax.class,
+        new TypePattern(int.class),
+        new TypePattern(int.class));
+    var matcher = pattern.toMatcher(lookup, MinMax.class, carrierType, 0, throwNPE(MinMax.class, "NPE !"));
+    var op = of(empty, matcher);
 
     // MinMax(v1, v2) = new MinMax(v1, v2):
     v1 = 3;

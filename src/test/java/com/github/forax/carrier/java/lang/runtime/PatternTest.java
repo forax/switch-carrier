@@ -14,6 +14,7 @@ import java.lang.invoke.MethodType;
 
 import static org.junit.jupiter.api.Assertions.*;
 public class PatternTest {
+
   @Test
   public void nullPattern() throws Throwable {
     var lookup = MethodHandles.lookup();

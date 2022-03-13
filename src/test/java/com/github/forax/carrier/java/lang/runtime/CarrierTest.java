@@ -3,12 +3,9 @@ package com.github.forax.carrier.java.lang.runtime;
 import org.junit.jupiter.api.Test;
 
 import java.lang.invoke.MethodType;
-import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.*;
-
 public class CarrierTest {
-
   @Test
   public void carrierEmpty() throws Throwable {
     var methodType = MethodType.methodType(Object.class);

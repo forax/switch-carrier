@@ -5,12 +5,8 @@ import com.github.forax.carrier.java.lang.runtime.Pattern.RecordPattern;
 import com.github.forax.carrier.java.lang.runtime.Pattern.TypePattern;
 
 import java.lang.invoke.MethodHandles;
-import java.lang.invoke.MethodType;
 
-import static com.github.forax.carrier.java.lang.runtime.Matcher.bind;
 import static com.github.forax.carrier.java.lang.runtime.Matcher.of;
-import static com.github.forax.carrier.java.lang.runtime.Matcher.and;
-import static com.github.forax.carrier.java.lang.runtime.Matcher.project;
 import static com.github.forax.carrier.java.lang.runtime.Matcher.throwNPE;
 import static java.lang.invoke.MethodType.methodType;
 

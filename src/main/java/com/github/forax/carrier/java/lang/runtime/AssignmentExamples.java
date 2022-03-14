@@ -27,7 +27,7 @@ public class AssignmentExamples {
     var pattern = new RecordPattern(MinMax.class,
         new TypePattern(int.class),
         new TypePattern(int.class));
-    var matcher = pattern.toMatcher(lookup, MinMax.class, carrierType, 0, throwNPE(MinMax.class, "NPE !"));
+    var matcher = pattern.toMatcher(lookup, MinMax.class, carrierType, 0, true);
     var op = of(empty, matcher);
 
     // MinMax(v1, v2) = new MinMax(v1, v2):
@@ -44,10 +44,20 @@ public class AssignmentExamples {
     v1 = 4;
     v2 = 3;
     var minmax2 = v1 < v2? new MinMax(v1, v2): new MinMax(v2, v1);
-    var carrier2 = op.invokeExact(minmax1);
+    var carrier2 = op.invokeExact(minmax2);
     v1 = (int) carrierMetadata.accessor(0).invokeExact(carrier2);
     v2 = (int) carrierMetadata.accessor(1).invokeExact(carrier2);
     System.out.println("min2 " + v1);
     System.out.println("max2 " + v2);
+
+    // MinMax(v1, v2) = null
+    var minmax3 = (MinMax) null;
+    try {
+      var carrier3 = (Object) op.invokeExact(minmax3);
+      System.out.println(carrier3);
+    } catch(NullPointerException e) {
+      e.printStackTrace();
+      System.err.println("NPE " + e.getMessage());
+    }
   }
 }

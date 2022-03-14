@@ -1,6 +1,7 @@
 package com.github.forax.carrier.java.lang.runtime;
 
 import com.github.forax.carrier.java.lang.runtime.Matcher.CarrierMetadata;
+import com.github.forax.carrier.java.lang.runtime.Pattern.TypePattern;
 import org.junit.jupiter.api.Test;
 
 import java.lang.invoke.MethodHandle;
@@ -164,7 +165,9 @@ public class MatcherTest {
     var carrierMetadata = CarrierMetadata.fromCarrier(methodType(Object.class));
     var empty = carrierMetadata.empty();
 
-    var matcher = Matcher.throwNPE(String.class, "achtung !");
+    var pattern = new TypePattern(String.class);
+
+    var matcher = Matcher.throwNPE(String.class, pattern, pattern);
     assertThrows(NullPointerException.class, () -> {
       var result = (Object) matcher.invokeExact("data", empty);
     });

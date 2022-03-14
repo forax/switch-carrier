@@ -42,7 +42,7 @@ public class SwitchExamples {
       )
     );
 
-    var matcher = pattern.toMatcher(lookup, Object.class, carrierType, 1, doNotMatch(Object.class));
+    var matcher = pattern.toMatcher(lookup, Object.class, carrierType, 1, false);
     var op = of(empty, matcher);
 
     // match: new Rectangle(new Point(1, 2), new Point(3, 4))

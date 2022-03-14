@@ -23,7 +23,7 @@ public class Matcher {
   static {
     var lookup = lookup();
     try {
-      THROW_NPE = lookup.findStatic(Matcher.class, "throw_npe", methodType(void.class, String.class));
+      THROW_NPE = lookup.findStatic(Matcher.class, "throw_npe", methodType(void.class, Pattern.class, Pattern.class));
       IS_INSTANCE = lookup.findVirtual(Class.class, "isInstance", methodType(boolean.class, Object.class));
       EQUALS = lookup.findVirtual(Object.class, "equals", methodType(boolean.class, Object.class));
       IS_NULL = lookup.findStatic(Objects.class, "isNull", methodType(boolean.class, Object.class));
@@ -96,8 +96,9 @@ public class Matcher {
     }
   }
 
-  private static void throw_npe(String message) {
-    throw new NullPointerException(message);
+  private static void throw_npe(Pattern rootPattern, Pattern pattern) {
+    var prefixErrorMessage = rootPattern.prefixErrorMessage(pattern);
+    throw new NullPointerException("null while matching pattern " + prefixErrorMessage);
   }
 
 //  private static void _tap(Object... args) {
@@ -157,10 +158,12 @@ public class Matcher {
     return dropArguments(insertArguments(equals, 0, constant).asType(methodType(boolean.class, type)), 1, Object.class);
   }
 
-  // return (o, carrier) -> { throw new NullPointerException(); };
-  public static MethodHandle throwNPE(Class<?> type, String message) {
+  // return (o, carrier) -> { throw new NullPointerException(rootPattern.prefixErrorMessage(pattern)); };
+  public static MethodHandle throwNPE(Class<?> type, Pattern rootPattern, Pattern pattern) {
     Objects.requireNonNull(type, "type is null");
-    return dropArguments(THROW_NPE.bindTo(message).asType(methodType(Object.class)), 0, type, Object.class);
+    Objects.requireNonNull(rootPattern, "rootPattern is null");
+    Objects.requireNonNull(pattern, "pattern is null");
+    return dropArguments(insertArguments(THROW_NPE, 0, rootPattern, pattern).asType(methodType(Object.class)), 0, type, Object.class);
   }
 
   // return (o, carrier) -> matcher.apply(project.apply(o), carrier);

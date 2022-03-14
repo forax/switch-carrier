@@ -29,7 +29,7 @@ public class InstanceOfExamples {
         new TypePattern(Point.class),
         new TypePattern(Point.class)
     );
-    var matcher = pattern.toMatcher(lookup, Object.class, carrierType, 0, doNotMatch(Object.class));
+    var matcher = pattern.toMatcher(lookup, Object.class, carrierType, 0, false);
     var op = of(empty, matcher);
 
     // match: new Rectangle(new Point(1, 2), new Point(3, 4))

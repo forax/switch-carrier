@@ -18,12 +18,12 @@ public sealed interface Pattern {
   record OrPattern(Pattern pattern1, Pattern pattern2) implements Pattern {}
   record ResultPattern(int index, Pattern pattern) implements Pattern {}
 
-  default MethodHandle toMatcher(Lookup lookup, Class<?> receiverType, MethodType carrierType, int firstBinding, MethodHandle nullMatcher) {
+  default MethodHandle toMatcher(Lookup lookup, Class<?> receiverType, MethodType carrierType, int firstBinding, boolean emitNPE) {
     var carrierMetadata = CarrierMetadata.fromCarrier(carrierType);
-    return toMatcher(lookup, receiverType, new BindingAllocator(carrierMetadata, firstBinding), nullMatcher);
+    return toMatcher(lookup, receiverType, new BindingAllocator(carrierMetadata, firstBinding), emitNPE? this: null);
   }
 
-  /*private*/ class BindingAllocator {
+  class BindingAllocator {
     private final CarrierMetadata carrierMetadata;
     private int binding;
 
@@ -32,12 +32,16 @@ public sealed interface Pattern {
       this.binding = binding;
     }
 
+    public CarrierMetadata carrierMetadata() {
+      return carrierMetadata;
+    }
+
     public int nextBinding() {
       return binding++;
     }
   }
 
-  private MethodHandle toMatcher(Lookup lookup, Class<?> receiverType, BindingAllocator bindingAllocator, MethodHandle nullMatcher) {
+  default MethodHandle toMatcher(Lookup lookup, Class<?> receiverType, BindingAllocator bindingAllocator, Pattern rootPattern) {
     return switch (this) {
       case NullPattern nullPattern ->
           test(isNull(receiverType),
@@ -51,11 +55,9 @@ public sealed interface Pattern {
         if (receiverType == typePattern.type) {
           yield bind(bindingAllocator.nextBinding(), bindingAllocator.carrierMetadata);
         }
-        yield test(isNull(receiverType),
-            cast(receiverType, nullMatcher),
-            test(isInstance(receiverType, typePattern.type),
-                cast(receiverType, bind(bindingAllocator.nextBinding(), bindingAllocator.carrierMetadata)),
-                doNotMatch(receiverType)));
+        yield test(isInstance(receiverType, typePattern.type),
+            cast(receiverType, bind(bindingAllocator.nextBinding(), bindingAllocator.carrierMetadata)),
+            doNotMatch(receiverType));
       }
       //case GuardPattern guardPattern ->
       //    and(
@@ -75,7 +77,7 @@ public sealed interface Pattern {
                       lookup,
                       returnType,
                       bindingAllocator,
-                      nullMatcher));
+                      rootPattern));
             })
             .toArray(MethodHandle[]::new);
 
@@ -87,24 +89,72 @@ public sealed interface Pattern {
         if (matcher == null) { // empty record
           matcher = doMatch(recordClass);
         }
-        if (receiverType == recordClass) {
-          yield matcher;
-        }
-        yield test(isNull(receiverType),
-            cast(receiverType, nullMatcher),
+        var result = (receiverType == recordClass)?
+            matcher:
             test(isInstance(receiverType, recordClass),
                 cast(receiverType, matcher),
-                doNotMatch(receiverType)));
+                doNotMatch(receiverType));
+        yield test(isNull(receiverType),
+            rootPattern == null? doNotMatch(receiverType): throwNPE(receiverType, rootPattern, this),
+            result);
       }
       //case DeconstructorPattern deconstructorPattern -> {}
       case OrPattern orPattern ->
           or(
-              orPattern.pattern1.toMatcher(lookup, receiverType, bindingAllocator, nullMatcher),
-              orPattern.pattern2.toMatcher(lookup, receiverType, bindingAllocator, nullMatcher));
+              orPattern.pattern1.toMatcher(lookup, receiverType, bindingAllocator, rootPattern),
+              orPattern.pattern2.toMatcher(lookup, receiverType, bindingAllocator, rootPattern));
       case ResultPattern resultPattern ->
           and(
-              resultPattern.pattern.toMatcher(lookup, receiverType, bindingAllocator, nullMatcher),
+              resultPattern.pattern.toMatcher(lookup, receiverType, bindingAllocator, rootPattern),
               index(receiverType, bindingAllocator.carrierMetadata, resultPattern.index));
     };
+  }
+
+  default String prefixErrorMessage(Pattern pattern) {
+    return switch (this) {
+      case NullPattern nullPattern -> "null";
+      case ConstantPattern constantPattern -> "" + constantPattern.constant;
+      case TypePattern typePattern -> {
+        if (typePattern == pattern) {
+          yield shortName(typePattern.type) + "^";
+        }
+        yield shortName(typePattern.type);
+      }
+      case RecordPattern recordPattern -> {
+        if (recordPattern == pattern) {
+          yield shortName(recordPattern.recordClass) + "^";
+        }
+        var builder = new StringBuilder()
+            .append(shortName(recordPattern.recordClass))
+            .append('(');
+        var separator = "";
+        for(var subPattern: recordPattern.patterns) {
+          var errorMessage = subPattern.prefixErrorMessage(pattern);
+          builder.append(separator).append(errorMessage);
+          if (errorMessage.endsWith("^")) {
+            yield builder.toString();
+          }
+          separator = ", ";
+        }
+        yield builder.append(')').toString();
+      }
+      case OrPattern orPattern -> {
+        var errorMessage = orPattern.pattern1.prefixErrorMessage(pattern);
+        if (errorMessage.endsWith("^")) {
+          yield errorMessage;
+        }
+        yield orPattern.pattern2.prefixErrorMessage(pattern);
+      }
+      case ResultPattern resultPattern -> resultPattern.pattern.prefixErrorMessage(pattern);
+    };
+  }
+
+  private static String shortName(Class<?> type) {
+    if (type.isArray()) {
+      return shortName(type.getComponentType()) + "[]";
+    }
+    var name = type.getName();
+    var index = name.lastIndexOf('.');
+    return index == -1? name: name.substring(index + 1);
   }
 }
